@@ -1,81 +1,13 @@
-import { Search, Clock, Briefcase, AlertCircle } from "lucide-react";
+import { Search, Clock, Briefcase, AlertCircle, Plus } from "lucide-react";
 import { useState } from "react";
-
-// Employee data with productivity metrics
-const employees = [
-  {
-    id: 1,
-    name: "Safeeq",
-    phone: "9876543210",
-    role: "Senior Technician",
-    projects: 3,
-    cashBalance: "₹ 5,800",
-    performance: "92%",
-    clockIn: "09:00 AM",
-    clockOut: "06:30 PM",
-    totalHours: 9.5,
-    serviceHours: 7.5,
-    breakHours: 1,
-    idleHours: 1,
-    servicesCompleted: 3,
-    avgServiceTime: 2.5,
-  },
-  {
-    id: 2,
-    name: "Rajesh",
-    phone: "9876543211",
-    role: "Technician",
-    projects: 2,
-    cashBalance: "₹ 2,100",
-    performance: "88%",
-    clockIn: "09:15 AM",
-    clockOut: "06:00 PM",
-    totalHours: 8.75,
-    serviceHours: 6.5,
-    breakHours: 1.5,
-    idleHours: 0.75,
-    servicesCompleted: 2,
-    avgServiceTime: 3.25,
-  },
-  {
-    id: 3,
-    name: "Arun",
-    phone: "9876543212",
-    role: "Technician",
-    projects: 2,
-    cashBalance: "₹ 950",
-    performance: "85%",
-    clockIn: "09:30 AM",
-    clockOut: "05:45 PM",
-    totalHours: 8.25,
-    serviceHours: 5.5,
-    breakHours: 1.5,
-    idleHours: 1.25,
-    servicesCompleted: 2,
-    avgServiceTime: 2.75,
-  },
-  {
-    id: 4,
-    name: "Vikram",
-    phone: "9876543213",
-    role: "Junior Technician",
-    projects: 1,
-    cashBalance: "₹ 0",
-    performance: "78%",
-    clockIn: "10:00 AM",
-    clockOut: "05:30 PM",
-    totalHours: 7.5,
-    serviceHours: 4.5,
-    breakHours: 1.5,
-    idleHours: 1.5,
-    servicesCompleted: 1,
-    avgServiceTime: 4.5,
-  },
-];
+import { useEmployeesStore, type Employee } from "@/store/employeesStore";
+import { EmployeeFormModal } from "@/components/EmployeeFormModal";
 
 const EmployeesPage = () => {
+  const { employees } = useEmployeesStore();
   const [search, setSearch] = useState("");
-  const [selectedEmployee, setSelectedEmployee] = useState<typeof employees[0] | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const filtered = employees.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()));
 
   const getProductivityColor = (serviceHours: number, totalHours: number) => {
@@ -94,9 +26,19 @@ const EmployeesPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold text-card-foreground">Employees</h2>
-        <p className="text-sm text-muted-foreground">Track productivity and time management</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg sm:text-xl font-bold text-card-foreground">Employees</h2>
+          <p className="text-sm text-muted-foreground">Track productivity and time management</p>
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-[0px_5px_12px_rgba(39,47,158,0.2)] transition-all hover:opacity-90"
+          style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
+        >
+          <Plus className="w-4 h-4" />
+          Add Employee
+        </button>
       </div>
 
       <div className="relative w-full sm:max-w-xs">
@@ -344,6 +286,14 @@ const EmployeesPage = () => {
           </div>
         </div>
       )}
+
+      {/* Employee Form Modal */}
+      <EmployeeFormModal
+        open={showAddModal}
+        mode="create"
+        onClose={() => setShowAddModal(false)}
+        onSaved={() => setShowAddModal(false)}
+      />
     </div>
   );
 };
