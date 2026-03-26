@@ -3,7 +3,7 @@ import { Search, X, Edit2, Plus, Clipboard, Calendar, User, MapPin, Phone, Credi
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useProjectsStore, type WorkOrder } from "@/store/projectsStore";
+import { useProjectsStore, type WorkOrder, type WorkOrderStatus } from "@/store/projectsStore";
 import { useLeadsStore } from "@/store/leadsStore";
 import { CustomerFormModal } from "@/components/CustomerFormModal";
 import { useCustomersStore, type Customer } from "@/store/customersStore";
@@ -34,12 +34,14 @@ const statusLabels = {
 const ProjectsPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { workOrders, addWorkOrder, getNextWorkOrderId } = useProjectsStore();
+  const { workOrders, addWorkOrder, getNextWorkOrderId, updateWorkOrder } = useProjectsStore();
   const { getLead, updateLead } = useLeadsStore();
   const { customers } = useCustomersStore();
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<"All" | "Due Today">("All");
   const [selectedProject, setSelectedProject] = useState<WorkOrder | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingProject, setEditingProject] = useState<WorkOrder | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [convertedLeadName, setConvertedLeadName] = useState("");
@@ -58,6 +60,20 @@ const ProjectsPage = () => {
     notes: ""
   });
   const [newService, setNewService] = useState("");
+
+  // Edit form data
+  const [editFormData, setEditFormData] = useState({
+    customerName: "",
+    phone: "",
+    address: "",
+    serviceType: "",
+    frequency: "",
+    totalValue: "",
+    paidAmount: "",
+    assignedTech: "",
+    notes: "",
+    status: "Open" as WorkOrderStatus
+  });
 
   useEffect(() => {
     const convertLeadId = searchParams.get("convertLeadId");
@@ -171,6 +187,61 @@ const ProjectsPage = () => {
     const total = parseInt(project.totalValue.replace(/[₹,\s]/g, ""));
     const paid = parseInt(project.paidAmount.replace(/[₹,\s]/g, ""));
     return Math.round((paid / total) * 100);
+  };
+
+  const handleEditProject = (project: WorkOrder) => {
+    setEditingProject(project);
+    setEditFormData({
+      customerName: project.customer,
+      phone: project.phone,
+      address: project.address,
+      serviceType: project.serviceType,
+      frequency: project.frequency,
+      totalValue: project.totalValue.replace(/[₹,\s]/g, ""),
+      paidAmount: project.paidAmount.replace(/[₹,\s]/g, ""),
+      assignedTech: project.assignedTech,
+      notes: project.notes,
+      status: project.status
+    });
+    setShowEditForm(true);
+  };
+
+  const handleUpdateProject = () => {
+    if (!editFormData.customerName.trim() || !editFormData.phone.trim() || !editFormData.address.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (editingProject) {
+      updateWorkOrder(editingProject.id, {
+        customer: editFormData.customerName,
+        phone: editFormData.phone,
+        address: editFormData.address,
+        serviceType: editFormData.serviceType,
+        frequency: editFormData.frequency,
+        totalValue: `₹ ${parseInt(editFormData.totalValue).toLocaleString()}`,
+        paidAmount: `₹ ${parseInt(editFormData.paidAmount).toLocaleString()}`,
+        assignedTech: editFormData.assignedTech,
+        notes: editFormData.notes,
+        status: editFormData.status
+      });
+
+      toast.success("Work order updated successfully!");
+      setShowEditForm(false);
+      setEditingProject(null);
+      setEditFormData({
+        customerName: "",
+        phone: "",
+        address: "",
+        serviceType: "",
+        frequency: "",
+        totalValue: "",
+        paidAmount: "",
+        assignedTech: "",
+        notes: "",
+        status: "Open"
+      });
+    }
   };
 
   return (
@@ -661,7 +732,7 @@ const ProjectsPage = () => {
                   </td>
                   <td className="px-5 py-4">
                     <button
-                      onClick={() => setSelectedProject(project)}
+                      onClick={() => handleEditProject(project)}
                       className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary/50 rounded-lg transition-colors"
                       title="Edit work order"
                     >
@@ -675,11 +746,12 @@ const ProjectsPage = () => {
         </div>
       </div>
 
-      {/* Project Details Dropdown */}
+      {/* Project Details Modal */}
       {selectedProject && (
-        <div className="bg-card rounded-xl border border-border shadow-lg animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="fixed inset-0 flex items-start justify-center pt-4 z-50 animate-in fade-in duration-300 p-4 overflow-hidden">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-6xl max-h-[95vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center justify-between p-6 border-b border-border bg-card flex-shrink-0">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-primary/10 rounded-lg">
@@ -703,8 +775,7 @@ const ProjectsPage = () => {
           </div>
 
           {/* Scrollable Content */}
-          <div className="max-h-[70vh] overflow-y-auto">
-            <div className="p-6 space-y-4">
+          <div className="overflow-y-auto flex-1 p-6 space-y-6 min-h-0">
 
               {/* Contact Information Card */}
               <div className="bg-secondary/30 rounded-xl p-5 border border-border">
@@ -823,8 +894,11 @@ const ProjectsPage = () => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            </div>
+
+            {/* Footer with Action Buttons */}
+            <div className="flex-shrink-0 border-t border-border bg-card">
+              <div className="flex flex-col sm:flex-row gap-3 p-6">
                 <button
                   onClick={closeModal}
                   className="flex-1 h-10 border border-border text-card-foreground rounded-lg hover:text-primary transition-colors font-medium text-sm"
@@ -841,7 +915,184 @@ const ProjectsPage = () => {
                   Assign Service
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* Edit Work Order Form Modal */}
+      {showEditForm && editingProject && (
+        <div className="fixed inset-0 flex items-start justify-center pt-4 z-50 animate-in fade-in duration-300 p-4 overflow-hidden">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-border bg-card flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-card-foreground">Edit Work Order</h3>
+                <p className="text-xs text-muted-foreground mt-1">Update work order information</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowEditForm(false);
+                  setEditingProject(null);
+                  setEditFormData({
+                    customerName: "",
+                    phone: "",
+                    address: "",
+                    serviceType: "",
+                    frequency: "",
+                    totalValue: "",
+                    paidAmount: "",
+                    assignedTech: "",
+                    notes: "",
+                    status: "Open"
+                  });
+                }}
+                className="p-2 hover:bg-secondary rounded-lg transition-colors flex-shrink-0"
+              >
+                <X className="w-6 h-6 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Customer Name</label>
+                  <input 
+                    value={editFormData.customerName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Customer name" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Phone</label>
+                  <input 
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Phone number" 
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
+                  <input 
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Service address" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Service Type</label>
+                  <input 
+                    value={editFormData.serviceType}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, serviceType: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Service type" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Frequency</label>
+                  <select
+                    value={editFormData.frequency}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, frequency: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  >
+                    <option value="">Select frequency</option>
+                    <option value="One-Time">One-Time</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Half-Yearly">Half-Yearly</option>
+                    <option value="Yearly">Yearly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Total Value (₹)</label>
+                  <input 
+                    type="number"
+                    value={editFormData.totalValue}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, totalValue: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Total value" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Paid Amount (₹)</label>
+                  <input 
+                    type="number"
+                    value={editFormData.paidAmount}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, paidAmount: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Paid amount" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Assigned Technician</label>
+                  <input 
+                    value={editFormData.assignedTech}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, assignedTech: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Technician name" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
+                  <select
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as WorkOrderStatus }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  >
+                    <option value="Open">Open</option>
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+                  <textarea 
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    rows={3} 
+                    placeholder="Additional notes..." 
+                  />
+                </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed Footer with Buttons */}
+            <div className="flex-shrink-0 border-t border-border bg-card">
+              <div className="flex gap-3 p-6">
+                <button 
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setEditingProject(null);
+                    setEditFormData({
+                      customerName: "",
+                      phone: "",
+                      address: "",
+                      serviceType: "",
+                      frequency: "",
+                      totalValue: "",
+                      paidAmount: "",
+                      assignedTech: "",
+                      notes: "",
+                      status: "Open"
+                    });
+                  }}
+                  className="flex-1 h-10 border border-border text-card-foreground text-sm font-medium hover:text-primary transition-colors rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleUpdateProject}
+                  className="flex-1 h-10 text-sm font-semibold hover:opacity-90 text-white shadow-[0px_5px_12px_rgba(39,47,158,0.2)] transition-all rounded-lg" 
+                  style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
+                >
+                  Update Work Order
+                </button>
+              </div>
             </div>
           </div>
         </div>

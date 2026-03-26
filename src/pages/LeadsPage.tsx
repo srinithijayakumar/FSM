@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Plus, Search, Eye, EyeOff, X, Clock, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, X, Clock, CheckCircle2, Edit, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useLeadsStore, type LeadStatus, type Lead, type UrgencyLevel } from "@/store/leadsStore";
@@ -21,7 +21,7 @@ function formatLeadId(id: number) {
 
 const LeadsPage = () => {
   const navigate = useNavigate();
-  const { leads, updateLead, addLead } = useLeadsStore();
+  const { leads, updateLead, addLead, deleteLead } = useLeadsStore();
   const [filter, setFilter] = useState<LeadStatus | "All">("All");
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
@@ -30,6 +30,8 @@ const LeadsPage = () => {
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [quoteFormData, setQuoteFormData] = useState({ amount: "", contract: "", notes: "" });
   const [showMoreFields, setShowMoreFields] = useState(false);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
   
   // Form state for new lead
   const [formData, setFormData] = useState({
@@ -46,6 +48,22 @@ const LeadsPage = () => {
     notes: "",
   });
   const [newService, setNewService] = useState("");
+
+  // Form state for editing lead
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    services: [] as string[],
+    amount: "",
+    expectedDateTime: "",
+    leadSource: "",
+    urgencyLevel: "Medium" as UrgencyLevel,
+    branch: "",
+    salesExecutive: "",
+    notes: "",
+  });
+  const [editNewService, setEditNewService] = useState("");
 
   const filtered = leads.filter((l) => {
     const matchStatus = filter === "All" || l.status === filter;
@@ -156,6 +174,88 @@ const LeadsPage = () => {
     });
     setShowMoreFields(false);
     setShowForm(false);
+  };
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead);
+    setEditFormData({
+      name: lead.name,
+      phone: lead.phone,
+      address: lead.address,
+      services: [...lead.services],
+      amount: lead.amount ? lead.amount.toString() : "",
+      expectedDateTime: lead.expectedDateTime,
+      leadSource: lead.leadSource,
+      urgencyLevel: lead.urgencyLevel,
+      branch: lead.branch,
+      salesExecutive: lead.salesExecutive,
+      notes: lead.notes,
+    });
+    setShowEditForm(true);
+  };
+
+  const handleUpdateLead = () => {
+    if (!editFormData.name.trim() || !editFormData.phone.trim() || !editFormData.address.trim() || editFormData.services.length === 0) {
+      toast.error("Please fill in all required fields and add at least one service");
+      return;
+    }
+
+    if (editingLead) {
+      updateLead(editingLead.id, {
+        name: editFormData.name,
+        phone: editFormData.phone,
+        address: editFormData.address,
+        services: editFormData.services,
+        amount: editFormData.amount.trim() ? Number(editFormData.amount) : null,
+        expectedDateTime: editFormData.expectedDateTime,
+        leadSource: editFormData.leadSource,
+        urgencyLevel: editFormData.urgencyLevel,
+        branch: editFormData.branch,
+        salesExecutive: editFormData.salesExecutive,
+        notes: editFormData.notes,
+      });
+
+      toast.success("Lead updated successfully!");
+      setShowEditForm(false);
+      setEditingLead(null);
+      setEditFormData({
+        name: "",
+        phone: "",
+        address: "",
+        services: [],
+        amount: "",
+        expectedDateTime: "",
+        leadSource: "",
+        urgencyLevel: "Medium",
+        branch: "",
+        salesExecutive: "",
+        notes: "",
+      });
+    }
+  };
+
+  const handleDeleteLead = (leadId: number, leadName: string) => {
+    if (window.confirm(`Are you sure you want to delete the lead for "${leadName}"? This action cannot be undone.`)) {
+      deleteLead(leadId);
+      toast.success("Lead deleted successfully!");
+    }
+  };
+
+  const handleAddEditService = () => {
+    if (editNewService.trim()) {
+      setEditFormData(prev => ({
+        ...prev,
+        services: [...prev.services, editNewService]
+      }));
+      setEditNewService("");
+    }
+  };
+
+  const handleRemoveEditService = (index: number) => {
+    setEditFormData(prev => ({
+      ...prev,
+      services: prev.services.filter((_, i) => i !== index)
+    }));
   };
 
   return (
@@ -409,67 +509,85 @@ const LeadsPage = () => {
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    {l.status === "New" && (
-                      <button
-                        onClick={() => {
-                          updateLead(l.id, { status: "Contacted" });
-                          toast.success("Lead marked as contacted");
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-all shadow-[0px_5px_12px_rgba(39,47,158,0.2)]"
-                        style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
-                        title="Mark as contacted"
-                      >
-                        Mark Contacted
-                      </button>
-                    )}
-                    {l.status === "Contacted" && (
-                      <button
-                        onClick={() => {
-                          setSelectedLeadForQuote(l);
-                          setShowQuoteForm(true);
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold text-warning border border-warning/20 rounded-lg hover:bg-warning/5 transition-all"
-                        title="Send quote to customer"
-                      >
-                        Send Quote
-                      </button>
-                    )}
-                    {l.status === "Quote Sent" && (
-                      l.quoteIsViewed ? (
+                    <div className="flex items-center gap-2">
+                      {l.status === "New" && (
                         <button
                           onClick={() => {
-                            navigate(`/projects?convertLeadId=${l.id}`);
+                            updateLead(l.id, { status: "Contacted" });
+                            toast.success("Lead marked as contacted");
                           }}
                           className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-all shadow-[0px_5px_12px_rgba(39,47,158,0.2)]"
                           style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
-                          title="Convert to project"
+                          title="Mark as contacted"
                         >
-                          Convert to Project
+                          Mark Contacted
                         </button>
-                      ) : (
+                      )}
+                      {l.status === "Contacted" && (
                         <button
                           onClick={() => {
-                            toast.info("Reminder sent to customer");
+                            setSelectedLeadForQuote(l);
+                            setShowQuoteForm(true);
                           }}
                           className="px-3 py-1.5 text-xs font-semibold text-warning border border-warning/20 rounded-lg hover:bg-warning/5 transition-all"
-                          title="Send reminder to customer"
+                          title="Send quote to customer"
                         >
-                          Send Reminder
+                          Send Quote
                         </button>
-                      )
-                    )}
-                    {l.status === "Converted" && (
+                      )}
+                      {l.status === "Quote Sent" && (
+                        l.quoteIsViewed ? (
+                          <button
+                            onClick={() => {
+                              navigate(`/projects?convertLeadId=${l.id}`);
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-all shadow-[0px_5px_12px_rgba(39,47,158,0.2)]"
+                            style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
+                            title="Convert to project"
+                          >
+                            Convert to Project
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              toast.info("Reminder sent to customer");
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold text-warning border border-warning/20 rounded-lg hover:bg-warning/5 transition-all"
+                            title="Send reminder to customer"
+                          >
+                            Send Reminder
+                          </button>
+                        )
+                      )}
+                      {l.status === "Converted" && (
+                        <button
+                          onClick={() => setSelectedLead(l)}
+                          className="px-3 py-1.5 text-xs font-semibold text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-all"
+                          title="View lead details"
+                        >
+                          View Details
+                        </button>
+                      )}
+                      {l.status === "Lost" && (
+                        <span className="text-xs font-medium text-muted-foreground">—</span>
+                      )}
+                      
+                      {/* Edit and Delete buttons - always visible */}
                       <button
-                        onClick={() => setSelectedLead(l)}
-                        className="px-3 py-1.5 text-xs font-semibold text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-all"
-                        title="View lead details"
+                        onClick={() => handleEditLead(l)}
+                        className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="Edit lead"
                       >
-                        View Details
+                        <Edit className="w-4 h-4" />
                       </button>
-                    )}
-                    {l.status === "Lost" && (
-                      <span className="text-xs font-medium text-muted-foreground">—</span>
-                    )}
+                      <button
+                        onClick={() => handleDeleteLead(l.id, l.name)}
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                        title="Delete lead"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                   </tr>
                 );
@@ -479,13 +597,13 @@ const LeadsPage = () => {
         </div>
       </div>
 
-      {/* Quote View Details Dropdown */}
+      {/* Quote View Details Modal */}
       {selectedLead && (
-        <div className="bg-card rounded-xl border border-border shadow-lg animate-in fade-in slide-in-from-top-2 duration-300">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-border">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
+        <div className="fixed inset-0 flex items-start justify-center pt-8 z-50 animate-in fade-in duration-300 p-4 overflow-hidden">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-border bg-card flex-shrink-0">
+              <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg">
                   <Eye className="w-5 h-5 text-primary" />
                 </div>
@@ -494,18 +612,16 @@ const LeadsPage = () => {
                   <p className="text-sm text-muted-foreground">Quote View Status</p>
                 </div>
               </div>
+              <button
+                onClick={closeModal}
+                className="p-2 hover:bg-secondary rounded-lg transition-colors flex-shrink-0"
+              >
+                <X className="w-6 h-6 text-muted-foreground" />
+              </button>
             </div>
-            <button
-              onClick={closeModal}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors ml-4 flex-shrink-0"
-            >
-              <X className="w-6 h-6 text-muted-foreground" />
-            </button>
-          </div>
 
-          {/* Scrollable Content */}
-          <div className="max-h-[70vh] overflow-y-auto">
-            <div className="p-6 space-y-4">
+            {/* Scrollable Content */}
+            <div className="overflow-y-auto flex-1 p-6 space-y-6 min-h-0">
 
               {/* Lead Information Card */}
               <div className="bg-secondary/30 rounded-xl p-5 border border-border">
@@ -622,8 +738,10 @@ const LeadsPage = () => {
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
+            {/* Footer with Action Buttons */}
+            <div className="flex-shrink-0 border-t border-border bg-card">
               {selectedLead.status === "Quote Sent" && (
                 <div className="flex flex-col sm:flex-row gap-3 p-6">
                   {selectedLead.quoteIsViewed ? (
@@ -668,7 +786,6 @@ const LeadsPage = () => {
                   </button>
                 </div>
               )}
-
             </div>
           </div>
         </div>
@@ -676,7 +793,7 @@ const LeadsPage = () => {
 
       {/* Send Quote Form Modal */}
       {showQuoteForm && selectedLeadForQuote && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50 animate-in fade-in duration-300">
+        <div className="fixed inset-0 flex items-center justify-center z-50 animate-in fade-in duration-300">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md mx-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-6 space-y-5">
               {/* Header */}
@@ -773,6 +890,219 @@ const LeadsPage = () => {
                   Send Quote
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Form Modal */}
+      {showEditForm && editingLead && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 animate-in fade-in duration-300 p-4 overflow-hidden">
+          <div className="bg-card rounded-xl shadow-lg w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-border bg-card flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-card-foreground">Edit Lead</h3>
+                <p className="text-xs text-muted-foreground mt-1">Update lead information</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowEditForm(false);
+                  setEditingLead(null);
+                  setEditFormData({
+                    name: "",
+                    phone: "",
+                    address: "",
+                    services: [],
+                    amount: "",
+                    expectedDateTime: "",
+                    leadSource: "",
+                    urgencyLevel: "Medium",
+                    branch: "",
+                    salesExecutive: "",
+                    notes: "",
+                  });
+                  setEditNewService("");
+                }}
+                className="p-2 hover:bg-secondary rounded-lg transition-colors flex-shrink-0"
+              >
+                <X className="w-6 h-6 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-6 min-h-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Customer Info</label>
+                  <input 
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Customer name" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Phone</label>
+                  <input 
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Phone number" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Address</label>
+                  <input 
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Service address" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Urgency Level ( Low, High, Medium )</label>
+                  <select
+                    value={editFormData.urgencyLevel}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, urgencyLevel: e.target.value as UrgencyLevel }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  >
+                    {urgencyLevels.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Expected Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.expectedDateTime}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, expectedDateTime: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Services (add multiple)</label>
+                <div className="flex gap-2 mb-2">
+                  <input 
+                    value={editNewService}
+                    onChange={(e) => setEditNewService(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddEditService()}
+                    className="flex-1 px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    placeholder="Enter service name" 
+                  />
+                  <button 
+                    onClick={handleAddEditService}
+                    className="px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-medium"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {editFormData.services.map((service, index) => (
+                    <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg">
+                      <span className="text-xs font-medium text-primary">{service}</span>
+                      <button 
+                        onClick={() => handleRemoveEditService(index)}
+                        className="text-primary hover:text-primary/70"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Amount</label>
+                  <input
+                    type="number"
+                    value={editFormData.amount}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                    placeholder="Expected amount"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Lead Source</label>
+                  <select
+                    value={editFormData.leadSource}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, leadSource: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  >
+                    <option value="">Select lead source</option>
+                    {leadSources.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Branch</label>
+                  <select
+                    value={editFormData.branch}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, branch: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                  >
+                    <option value="">Select branch</option>
+                    {branches.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Sales Executive</label>
+                  <input
+                    value={editFormData.salesExecutive}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, salesExecutive: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border"
+                    placeholder="Name"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Notes</label>
+                  <textarea 
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 border border-border" 
+                    rows={2} 
+                    placeholder="Additional notes..." 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t border-border bg-card flex-shrink-0">
+              <button 
+                onClick={() => {
+                  setShowEditForm(false);
+                  setEditingLead(null);
+                  setEditFormData({
+                    name: "",
+                    phone: "",
+                    address: "",
+                    services: [],
+                    amount: "",
+                    expectedDateTime: "",
+                    leadSource: "",
+                    urgencyLevel: "Medium",
+                    branch: "",
+                    salesExecutive: "",
+                    notes: "",
+                  });
+                  setEditNewService("");
+                }}
+                className="flex-1 h-10 border border-border text-card-foreground text-sm font-medium hover:text-primary transition-colors rounded-lg"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdateLead}
+                className="flex-1 h-10 text-sm font-semibold hover:opacity-90 text-white shadow-[0px_5px_12px_rgba(39,47,158,0.2)] transition-all rounded-lg" 
+                style={{ background: "linear-gradient(138.75deg, #942BF4 -42.53%, #1E2F96 94.59%)" }}
+              >
+                Update Lead
+              </button>
             </div>
           </div>
         </div>
